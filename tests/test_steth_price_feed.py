@@ -25,33 +25,60 @@ def test_current_price_safe(stable_swap_oracle, curve_pool, price_feed):
     stable_swap_oracle.set_price(1e18)
 
     curve_pool.set_price(0.98 * 1e18)
-    assert price_feed.current_price() == (0.98 * 1e18, True, 1e18)
+    assert price_feed.current_price() == (0.98 * 1e18, True)
 
     curve_pool.set_price(0.95 * 1e18)
-    assert price_feed.current_price() == (0.95 * 1e18, True, 1e18)
+    assert price_feed.current_price() == (0.95 * 1e18, True)
+
+def test_full_price_info_safe(stable_swap_oracle, curve_pool, price_feed):
+    stable_swap_oracle.set_price(1e18)
+
+    curve_pool.set_price(0.98 * 1e18)
+    assert price_feed.full_price_info() == (0.98 * 1e18, True, 1e18)
+
+    curve_pool.set_price(0.95 * 1e18)
+    assert price_feed.full_price_info() == (0.95 * 1e18, True, 1e18)
 
 
 def test_current_price_safe_equals_1(stable_swap_oracle, curve_pool, price_feed):
     stable_swap_oracle.set_price(0.99 * 1e18)
     curve_pool.set_price(1e18)
-    assert price_feed.current_price() == (1e18, True, 0.99 * 1e18)
+    assert price_feed.current_price() == (1e18, True)
+
+def test_full_price_info_safe_equals_1(stable_swap_oracle, curve_pool, price_feed):
+    stable_swap_oracle.set_price(0.99 * 1e18)
+    curve_pool.set_price(1e18)
+    assert price_feed.full_price_info() == (1e18, True, 0.99 * 1e18)
 
 
 def test_current_price_unsafe_gt_1(stable_swap_oracle, curve_pool, price_feed):
     stable_swap_oracle.set_price(1e18)
     curve_pool.set_price(1.02 * 1e18)
-    assert price_feed.current_price() == (1.02 * 1e18, False, 1e18)
+    assert price_feed.current_price() == (1.02 * 1e18, False)
+
+def test_full_price_info_unsafe_gt_1(stable_swap_oracle, curve_pool, price_feed):
+    stable_swap_oracle.set_price(1e18)
+    curve_pool.set_price(1.02 * 1e18)
+    assert price_feed.full_price_info() == (1.02 * 1e18, False, 1e18)
 
 
 def test_current_price_unsafe_diff(stable_swap_oracle, curve_pool, price_feed):
     stable_swap_oracle.set_price(1e18)
     curve_pool.set_price(0.949 * 1e18)
-    assert price_feed.current_price() == (0.949 * 1e18, False, 1e18)
+    assert price_feed.current_price() == (0.949 * 1e18, False)
 
     stable_swap_oracle.set_price(0.949 * 1e18)
     curve_pool.set_price(1e18)
-    assert price_feed.current_price() == (1e18, False, 0.949 * 1e18)
+    assert price_feed.current_price() == (1e18, False)
 
+def test_full_price_info_unsafe_diff(stable_swap_oracle, curve_pool, price_feed):
+    stable_swap_oracle.set_price(1e18)
+    curve_pool.set_price(0.949 * 1e18)
+    assert price_feed.full_price_info() == (0.949 * 1e18, False, 1e18)
+
+    stable_swap_oracle.set_price(0.949 * 1e18)
+    curve_pool.set_price(1e18)
+    assert price_feed.full_price_info() == (1e18, False, 0.949 * 1e18)
 
 def test_update_safe_price(stable_swap_oracle, curve_pool, price_feed, stranger, helpers):
     prev_pool_price = 0
@@ -235,10 +262,10 @@ def test_set_max_safe_price_difference_acl(price_feed, stranger):
 def test_set_max_safe_price_difference_max_check(price_feed):
     admin = price_feed.admin()
     with reverts():
-        price_feed.set_max_safe_price_difference(10001, {'from': admin})
+        price_feed.set_max_safe_price_difference(1001, {'from': admin})
 
 
-def test_set_max_safe_price_difference(price_feed, stable_swap_oracle, curve_pool, stranger):
+def test_set_max_safe_price_difference(price_feed, stable_swap_oracle, curve_pool, stranger, helpers):
     oracle_price = 1e18
 
     stable_swap_oracle.set_price(oracle_price)
@@ -248,25 +275,37 @@ def test_set_max_safe_price_difference(price_feed, stable_swap_oracle, curve_poo
         price_feed.update_safe_price({'from': stranger})
 
     admin = price_feed.admin()
-    price_feed.set_max_safe_price_difference(1000, {'from': admin})
+    tx = price_feed.set_max_safe_price_difference(1000, {'from': admin})
+
+    helpers.assert_single_event_named('MaxSafePriceDifferenceChanged', tx, {
+      'max_safe_price_difference': 1000
+    })
 
     assert price_feed.max_safe_price_difference() == 1000 # 10%
 
     price_feed.update_safe_price({'from': stranger})
 
 
-def test_set_admin(price_feed, accounts, stranger):
+def test_set_admin(price_feed, accounts, stranger, helpers):
     with reverts():
         price_feed.set_admin(stranger, {'from': stranger})
 
     old_admin = price_feed.admin()
     new_admin = accounts[2]
 
-    price_feed.set_admin(new_admin, {'from': old_admin})
+    tx = price_feed.set_admin(new_admin, {'from': old_admin})
     assert price_feed.admin() == new_admin
+
+    helpers.assert_single_event_named('AdminChanged', tx, {
+      'admin': new_admin,
+    })
 
     with reverts():
         price_feed.set_admin(old_admin, {'from': old_admin})
 
-    price_feed.set_admin(old_admin, {'from': new_admin})
+    tx = price_feed.set_admin(old_admin, {'from': new_admin})
     assert price_feed.admin() == old_admin
+
+    helpers.assert_single_event_named('AdminChanged', tx, {
+      'admin': old_admin,
+    })
